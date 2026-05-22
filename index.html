@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Pomodoro Timer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+
+  <style>
+    /* =============================================
+       CSS VARIABLES — change colors/sizes here
+    ============================================= */
+    :root {
+      --focus-color:   #ff6b6b;
+      --break-color:   #51cf66;
+      --paused-color:  #ffd43b;
+      --bg:            #0f0f13;
+      --card:          #1a1a24;
+      --border:        #2a2a3a;
+      --text:          #f0f0f5;
+      --muted:         #6b6b85;
+      --radius:        16px;
+      --accent:        var(--focus-color); /* changes with state */
+    }
+
+    /* =============================================
+       RESET & BASE
+    ============================================= */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 48px;
+      /* subtle radial glow in bg */
+      background-image: radial-gradient(ellipse 60% 40% at 50% 0%, rgba(255,107,107,0.08) 0%, transparent 70%);
+    }
+
+    /* =============================================
+       HEADER
+    ============================================= */
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    header h1 {
+      font-family: 'Space Mono', monospace;
+      font-size: clamp(1.4rem, 5vw, 2rem);
+      letter-spacing: -1px;
+      color: var(--text);
+    }
+    header p {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-top: 4px;
+    }
+
+    /* =============================================
+       MAIN CARD
+    ============================================= */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px 28px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+    }
+
+    /* =============================================
+       MODE TABS (Focus / Break)
+    ============================================= */
+    .mode-tabs {
+      display: flex;
+      background: var(--bg);
+      border-radius: 10px;
+      padding: 4px;
+      margin-bottom: 28px;
+      border: 1px solid var(--border);
+    }
+    .mode-tab {
+      flex: 1;
+      padding: 8px;
+      border: none;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--muted);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s;
+    }
+    .mode-tab.active {
+      background: var(--accent);
+      color: #000;
+    }
+
+    /* =============================================
+       TIMER DISPLAY
+    ============================================= */
+    .timer-wrap {
+      text-align: center;
+      margin-bottom: 28px;
+      position: relative;
+    }
+
+    /* Ring SVG */
+    .ring-wrap {
+      position: relative;
+      display: inline-block;
+      margin-bottom: 8px;
+    }
+    .ring-svg {
+      transform: rotate(-90deg); /* start from top */
+      display: block;
+    }
+    .ring-bg { fill: none; stroke: var(--border); stroke-width: 6; }
+    .ring-progress {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 6;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 1s linear, stroke 0.4s;
+    }
+
+    /* Time text inside ring */
+    .timer-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+    .timer-display {
+      font-family: 'Space Mono', monospace;
+      font-size: clamp(2.6rem, 12vw, 3.8rem);
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1;
+      letter-spacing: -2px;
+    }
+    .timer-state {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--accent);
+      margin-top: 6px;
+      transition: color 0.4s;
+    }
+
+    /* =============================================
+       CONTROLS
+    ============================================= */
+    .controls {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-bottom: 28px;
+    }
+
+    .btn {
+      border: none;
+      border-radius: 10px;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.2s, background 0.3s;
+    }
+    .btn:active { transform: scale(0.95); }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+      font-size: 1rem;
+      padding: 14px 40px;
+      flex: 1;
+      max-width: 180px;
+    }
+    .btn-secondary {
+      background: var(--border);
+      color: var(--text);
+      font-size: 0.9rem;
+      padding: 14px 18px;
+    }
+    .btn-secondary:hover { background: #3a3a50; }
+
+    /* =============================================
+       SETTINGS
+    ============================================= */
+    .settings {
+      border-top: 1px solid var(--border);
+      padding-top: 20px;
+      margin-bottom: 0;
+    }
+    .settings-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+    .settings-row {
+      display: flex;
+      gap: 12px;
+    }
+    .setting-group {
+      flex: 1;
+    }
+    .setting-group label {
+      display: block;
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+    .setting-group input[type="number"] {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      font-size: 1rem;
+      padding: 8px 10px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .setting-group input[type="number"]:focus {
+      border-color: var(--accent);
+    }
+    /* hide number input arrows */
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+    .apply-btn {
+      margin-top: 14px;
+      width: 100%;
+      background: var(--border);
+      color: var(--text);
+      padding: 10px;
+      font-size: 0.85rem;
+      border-radius: 8px;
+    }
+    .apply-btn:hover { background: #3a3a50; }
+
+    /* =============================================
+       SESSION COUNTER BADGES
+    ============================================= */
+    .session-info {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 20px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .session-info span { display: flex; align-items: center; gap: 5px; }
+    .badge {
+      display: inline-block;
+      background: var(--accent);
+      color: #000;
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 1px 8px;
+      font-size: 0.78rem;
+      min-width: 22px;
+      text-align: center;
+      transition: background 0.4s;
+    }
+
+    /* =============================================
+       HISTORY
+    ============================================= */
+    .history-section {
+      width: 100%;
+      max-width: 420px;
+      margin-top: 24px;
+    }
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .history-header h2 {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--muted);
+    }
+    .clear-btn {
+      font-size: 0.72rem;
+      color: var(--muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .clear-btn:hover { color: var(--focus-color); }
+
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .history-item {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--focus-color);
+      border-radius: 8px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+      animation: slideIn 0.3s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .history-check { font-size: 1rem; }
+    .history-details { flex: 1; }
+    .history-label { font-weight: 600; color: var(--text); }
+    .history-time  { color: var(--muted); font-size: 0.75rem; margin-top: 1px; }
+
+    .empty-history {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 24px;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+    }
+
+    /* =============================================
+       PULSE animation when running
+    ============================================= */
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.6; }
+    }
+    .pulsing .timer-display { animation: pulse 2s ease-in-out infinite; }
+
+    /* =============================================
+       DONE FLASH overlay
+    ============================================= */
+    .flash-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.1s;
+      z-index: 999;
+    }
+    .flash-overlay.show {
+      animation: flashAnim 0.6s ease forwards;
+    }
+    @keyframes flashAnim {
+      0%   { opacity: 0.5; }
+      100% { opacity: 0; }
+    }
+    @media (max-width: 360px) {
+      .card { padding: 22px 16px; }
+      .btn-primary { padding: 12px 28px; font-size: 0.9rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Flash overlay for session end -->
+<div class="flash-overlay" id="flashOverlay"></div>
+
+<!-- HEADER -->
+<header>
+  <h1>🍅 Pomodoro</h1>
+  <p id="todayDate"></p>
+</header>
+
+<!-- MAIN CARD -->
+<div class="card">
+
+  <!-- Mode tabs -->
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tabFocus">Focus</button>
+    <button class="mode-tab"        id="tabBreak">Break</button>
+  </div>
+
+  <!-- Session badges -->
+  <div class="session-info">
+    <span>🎯 Sessions today: <span class="badge" id="sessionCount">0</span></span>
+  </div>
+
+  <!-- Ring + time display -->
+  <div class="timer-wrap" id="timerWrap">
+    <div class="ring-wrap">
+      <!-- SVG ring: r=90, circumference ≈ 565.5 -->
+      <svg class="ring-svg" width="220" height="220" viewBox="0 0 220 220">
+        <circle class="ring-bg"       cx="110" cy="110" r="90"/>
+        <circle class="ring-progress" cx="110" cy="110" r="90"
+                id="ringProgress"
+                stroke-dasharray="565.5"
+                stroke-dashoffset="0"/>
+      </svg>
+      <div class="timer-text">
+        <div class="timer-display" id="timerDisplay">25:00</div>
+        <div class="timer-state"   id="timerState">Ready</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="btn btn-secondary" id="resetBtn" title="Reset">↺</button>
+    <button class="btn btn-primary"   id="startBtn">Start</button>
+    <button class="btn btn-secondary" id="skipBtn"  title="Skip to next">⏭</button>
+  </div>
+
+  <!-- Settings -->
+  <div class="settings">
+    <div class="settings-title">Settings</div>
+    <div class="settings-row">
+      <div class="setting-group">
+        <label for="focusInput">Focus (min)</label>
+        <input type="number" id="focusInput" min="1" max="60" value="25"/>
+      </div>
+      <div class="setting-group">
+        <label for="breakInput">Break (min)</label>
+        <input type="number" id="breakInput" min="1" max="30" value="5"/>
+      </div>
+    </div>
+    <button class="btn apply-btn" id="applyBtn">Apply & Reset</button>
+  </div>
+
+</div><!-- /card -->
+
+<!-- HISTORY -->
+<section class="history-section">
+  <div class="history-header">
+    <h2>Today's Sessions</h2>
+    <button class="clear-btn" id="clearBtn">Clear</button>
+  </div>
+  <div class="history-list" id="historyList"></div>
+</section>
+<script>
+// -----------------------------------------------
+// 1.  CONSTANTS & STATE
+// -----------------------------------------------
+const CIRCUMFERENCE = 2 * Math.PI * 90; // ≈ 565.5
+
+// App state object — single source of truth
+const state = {
+  mode:       'focus',   // 'focus' | 'break'
+  running:    false,
+  timeLeft:   25 * 60,   // seconds
+  totalTime:  25 * 60,   // seconds (for progress ring)
+  focusMins:  25,
+  breakMins:  5,
+  interval:   null,
+};
+
+// -----------------------------------------------
+// 2.  DOM REFERENCES
+// -----------------------------------------------
+const timerDisplay  = document.getElementById('timerDisplay');
+const timerState    = document.getElementById('timerState');
+const timerWrap     = document.getElementById('timerWrap');
+const ringProgress  = document.getElementById('ringProgress');
+const startBtn      = document.getElementById('startBtn');
+const resetBtn      = document.getElementById('resetBtn');
+const skipBtn       = document.getElementById('skipBtn');
+const applyBtn      = document.getElementById('applyBtn');
+const focusInput    = document.getElementById('focusInput');
+const breakInput    = document.getElementById('breakInput');
+const tabFocus      = document.getElementById('tabFocus');
+const tabBreak      = document.getElementById('tabBreak');
+const historyList   = document.getElementById('historyList');
+const sessionCount  = document.getElementById('sessionCount');
+const clearBtn      = document.getElementById('clearBtn');
+const flashOverlay  = document.getElementById('flashOverlay');
+const todayDate     = document.getElementById('todayDate');
+
+// -----------------------------------------------
+// 3.  HELPER: format seconds → "mm:ss"
+// -----------------------------------------------
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+// -----------------------------------------------
+// 4.  HELPER: today's date string "YYYY-MM-DD"
+// -----------------------------------------------
+function todayKey() {
+  return new Date().toISOString().slice(0, 10); // e.g. "2025-05-22"
+}
+
+// Show today's date in header
+function showDate() {
+  const opts = { weekday: 'long', month: 'long', day: 'numeric' };
+  todayDate.textContent = new Date().toLocaleDateString(undefined, opts);
+}
+
+// -----------------------------------------------
+// 5.  UPDATE UI
+// -----------------------------------------------
+function updateDisplay() {
+  // Timer digits
+  timerDisplay.textContent = formatTime(state.timeLeft);
+
+  // State label
+  if (!state.running && state.timeLeft === state.totalTime) {
+    timerState.textContent = 'Ready';
+  } else if (!state.running) {
+    timerState.textContent = 'Paused';
+  } else {
+    timerState.textContent = state.mode === 'focus' ? 'Focusing…' : 'On Break';
+  }
+
+  // Progress ring
+  const progress  = state.timeLeft / state.totalTime;       // 1 → 0
+  const offset    = CIRCUMFERENCE * (1 - progress);
+  ringProgress.style.strokeDashoffset = offset;
+
+  // Accent color based on mode & running state
+  let accent = state.running
+    ? (state.mode === 'focus' ? 'var(--focus-color)' : 'var(--break-color)')
+    : 'var(--paused-color)';
+
+  // Update CSS variable
+  document.documentElement.style.setProperty('--accent', accent);
+
+  // Pulse animation only while running
+  timerWrap.classList.toggle('pulsing', state.running);
+
+  // Tabs
+  tabFocus.classList.toggle('active', state.mode === 'focus');
+  tabBreak.classList.toggle('active', state.mode === 'break');
+
+  // Start button label
+  if (!state.running && state.timeLeft === state.totalTime) {
+    startBtn.textContent = 'Start';
+  } else if (state.running) {
+    startBtn.textContent = 'Pause';
+  } else {
+    startBtn.textContent = 'Resume';
+  }
+}
+function playBeep() {
+  try {
+    const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+    // Play 3 short beeps
+    [0, 0.25, 0.5].forEach(delay => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type      = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.4, ctx.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.2);
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime  + delay + 0.2);
+    });
+  } catch(e) {
+    // Audio not available — silently ignore
+  }
+}
+
+// -----------------------------------------------
+// 7.  HISTORY (localStorage)
+// -----------------------------------------------
+function loadHistory() {
+  const saved = localStorage.getItem('pomo_history');
+  if (!saved) return [];
+  const parsed = JSON.parse(saved);
+  // If saved date ≠ today, wipe it (daily reset)
+  if (parsed.date !== todayKey()) {
+    localStorage.removeItem('pomo_history');
+    return [];
+  }
+  return parsed.sessions; // array of {label, time}
+}
+
+function saveHistory(sessions) {
+  localStorage.setItem('pomo_history', JSON.stringify({
+    date: todayKey(),
+    sessions
+  }));
+}
+
+function addSession(durationMins) {
+  const sessions = loadHistory();
+  const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  sessions.unshift({ label: `${durationMins}:00 focus`, time: now });
+  saveHistory(sessions);
+  renderHistory();
+}
+
+function renderHistory() {
+  const sessions = loadHistory();
+
+  // Update badge
+  sessionCount.textContent = sessions.length;
+
+  if (sessions.length === 0) {
+    historyList.innerHTML = `
+      <div class="empty-history">
+        No sessions yet today.<br/>Start focusing! 🎯
+      </div>`;
+    return;
+  }
+
+  historyList.innerHTML = sessions.map(s => `
+    <div class="history-item">
+      <span class="history-check">✅</span>
+      <div class="history-details">
+        <div class="history-label">${s.label}</div>
+        <div class="history-time">Completed at ${s.time}</div>
+      </div>
+    </div>
+  `).join('');
+}
+function tick() {
+  if (state.timeLeft <= 0) {
+    // Cycle complete!
+    clearInterval(state.interval);
+    state.running = false;
+
+    // Flash screen
+    flashOverlay.style.background = state.mode === 'focus'
+      ? 'rgba(255,107,107,0.3)'
+      : 'rgba(81,207,102,0.3)';
+    flashOverlay.classList.remove('show');
+    void flashOverlay.offsetWidth; // reflow trick to restart animation
+    flashOverlay.classList.add('show');
+
+    playBeep();
+
+    // Save to history only when a FOCUS session ends
+    if (state.mode === 'focus') {
+      addSession(state.focusMins);
+    }
+
+    // Auto-switch mode
+    switchMode(state.mode === 'focus' ? 'break' : 'focus');
+    startTimer(); // auto-start next cycle
+    return;
+  }
+
+  state.timeLeft--;
+  updateDisplay();
+}
+
+function startTimer() {
+  state.running = true;
+  state.interval = setInterval(tick, 1000);
+  updateDisplay();
+}
+
+function pauseTimer() {
+  clearInterval(state.interval);
+  state.running = false;
+  updateDisplay();
+}
+
+function resetTimer() {
+  clearInterval(state.interval);
+  state.running  = false;
+  state.timeLeft = state.totalTime;
+  updateDisplay();
+}
+
+function switchMode(newMode) {
+  state.mode      = newMode;
+  state.totalTime = newMode === 'focus'
+    ? state.focusMins * 60
+    : state.breakMins * 60;
+  state.timeLeft  = state.totalTime;
+  updateDisplay();
+}
+
+// -----------------------------------------------
+// 9.  EVENT LISTENERS
+// -----------------------------------------------
+
+// Start / Pause / Resume
+startBtn.addEventListener('click', () => {
+  if (state.running) {
+    pauseTimer();
+  } else {
+    startTimer();
+  }
+});
+
+// Reset
+resetBtn.addEventListener('click', () => {
+  resetTimer();
+});
+
+// Skip to next phase
+skipBtn.addEventListener('click', () => {
+  clearInterval(state.interval);
+  state.running = false;
+  switchMode(state.mode === 'focus' ? 'break' : 'focus');
+});
+
+// Tab: manually switch Focus
+tabFocus.addEventListener('click', () => {
+  if (state.mode === 'focus') return;
+  clearInterval(state.interval);
+  state.running = false;
+  switchMode('focus');
+});
+
+// Tab: manually switch Break
+tabBreak.addEventListener('click', () => {
+  if (state.mode === 'break') return;
+  clearInterval(state.interval);
+  state.running = false;
+  switchMode('break');
+});
+
+// Apply settings
+applyBtn.addEventListener('click', () => {
+  const f = parseInt(focusInput.value) || 25;
+  const b = parseInt(breakInput.value) || 5;
+  // Clamp values
+  state.focusMins = Math.min(Math.max(f, 1), 60);
+  state.breakMins = Math.min(Math.max(b, 1), 30);
+  focusInput.value = state.focusMins;
+  breakInput.value = state.breakMins;
+
+  clearInterval(state.interval);
+  state.running = false;
+  state.mode    = 'focus'; // go back to focus on apply
+  switchMode('focus');
+});
+clearBtn.addEventListener('click', () => {
+  if (confirm('Clear all sessions for today?')) {
+    localStorage.removeItem('pomo_history');
+    renderHistory();
+  }
+});
+
+// Keyboard shortcuts: Space = start/pause, R = reset
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return; // don't fire in inputs
+  if (e.code === 'Space') {
+    e.preventDefault();
+    startBtn.click();
+  }
+  if (e.key === 'r' || e.key === 'R') {
+    resetBtn.click();
+  }
+});
+
+// -----------------------------------------------
+// 10. INIT — run when page loads
+// -----------------------------------------------
+showDate();
+switchMode('focus'); // set up initial state
+renderHistory();     // load and display saved history
+</script>
+</body>
+</html>
